@@ -1,6 +1,5 @@
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
 from models import Base, UserSettings
-
 from config import POSTGRES_URL
 
 engine = create_async_engine(POSTGRES_URL, echo=False)
@@ -16,7 +15,7 @@ async def save_setting(user_id: int, key, value):
     async with async_session() as session:
         settings = await session.get(UserSettings, user_id)
         setattr(settings, key, value)
-        print(await settings.to_dict())
+        # print(await settings.to_dict())
         await session.commit()
 
 
@@ -34,14 +33,6 @@ async def create_user_settings(user_id: int):
         session.add(settings)
         await session.commit()
         return settings
-
-
-async def get_img(user_id: int):
-    async with async_session() as session:
-        settings = await session.get(UserSettings, user_id)
-        if not settings:
-            return None
-        return settings.chat_id, settings.last_img
 
 
 async def delete_user(user_id):

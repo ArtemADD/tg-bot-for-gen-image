@@ -4,52 +4,36 @@ from models import UserSettings
 redis = Redis(host='localhost', port=6379, db=0, decode_responses=True)
 
 
-async def update_h(user_id, key, value):
+async def update_hsettings(user_id, key, value):
     k = f"user:{user_id}:settings"
     await redis.hset(k, key, value)
+    await redis.expire(k, 300)
 
 
-async def add_h(user: UserSettings):
+async def add_hsettings(user: UserSettings):
     k = f"user:{user.user_id}:settings"
     s = await user.to_dict()
-    await redis.hset(k, mapping={k: v if v is not None else '' for k, v in s.items()})
+    await redis.hset(k, mapping={k: '' if v is None else v if v.__class__ != bool else '1' if v else '0' for k, v in s.items()})
+    await redis.expire(k, 300)
 
 
-async def chek_h(user_id):
+async def chek_hsettings(user_id) -> bool:
     k = f"user:{user_id}:settings"
-    return await redis.exists(k) > 0
+    if await redis.exists(k) > 0:
+        await redis.expire(k, 300)
+        return True
+    return False
 
 
-async def get_h(user_id: int):
+async def get_hsettings(user_id: int) -> dict[str, int | str | float] | None:
     k = f"user:{user_id}:settings"
-    if await chek_h(user_id):
-        print(r := await go_int(await redis.hgetall(k)))
-        return r
+    if await chek_hsettings(user_id):
+        result = await convert_from_redis(await redis.hgetall(k))
+        # print(r)
+        await redis.expire(k, 300)
+        return result
     return None
 
 
-async def get_ah():
-    cursor = 0
-    user_settings = {}
-
-    while True:
-        cursor, keys = await redis.scan(cursor=cursor, match="user:*:settings", count=100)
-
-        for key in keys:
-            # Извлекаем user_id из ключа, например: "user:123:settings"
-            parts = key.split(":")
-            if len(parts) != 3:
-                continue
-            user_id = int(parts[1])
-
-            settings = await redis.hgetall(key)
-            user_settings[user_id] = settings
-
-        if cursor == 0:
-            break
-
-    return user_settings
-
-
-async def go_int(s: dict):
-    return {k: v if not v.isdigit() else int(v) for k, v in s.items() }
+async def convert_from_redis(s: dict) -> dict[str, int | str | float]:
+    return {k: int(v) if v.isdigit() else float(v) if all(list(map(lambda x: x.isdigit(), v.split('.')))) else v for k, v in s.items()}

@@ -1,7 +1,8 @@
-SQLAlchemy~=2.0.41
-python-telegram-bot~=22.1
-aiogram~=3.20.0
-redis~=6.2.0
-alembic~=1.16.1
-torch~=2.8.0.dev20250608+rocm6.4
-diffusers~=0.33.1
+SQLAlchemy>=2.0.41
+python-telegram-bot>=22.1
+aiogram>=3.20.0
+redis>=6.2.0
+alembic>=1.16.1
+diffusers>=0.33.1
+torch>=2.7.1+cu128
+pillow>=11.0.0
