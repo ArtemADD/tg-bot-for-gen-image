@@ -24,5 +24,6 @@ class UserSettings(Base):
     scheduler: Mapped[str] = mapped_column(String, default='Euler')
     cuda: Mapped[bool] = mapped_column(Boolean, default=False)
     num_images: Mapped[int] = mapped_column(Integer, default=1)
+    loras: Mapped[str] = mapped_column(String, default='')
     steps: Mapped[int] = mapped_column(Integer, default=30)
     seed: Mapped[int] = mapped_column(Integer, nullable=True)

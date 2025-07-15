@@ -1,3 +1,4 @@
+import os
 from os import PathLike
 from PIL.Image import Image
 from diffusers import DiffusionPipeline, LCMScheduler, StableDiffusionXLPipeline, DPMSolverMultistepScheduler, EulerAncestralDiscreteScheduler
@@ -33,8 +34,8 @@ class ModelLoader:
     def set_scheduler(self, scheduler: [str | None]):
         self.scheduler = scheduler
 
-    def set_lora(self, lora: str | None):
-        self.lora = lora
+    def set_lora(self, lora: str | list | None):
+        self.lora = lora if lora.__class__ == list and lora != [] else [lora] if lora.__class__ == str and lora != '' else None
 
     def set_cuda(self, cuda: bool):
         self.cuda = cuda
@@ -54,16 +55,16 @@ class ModelLoader:
                         torch_dtype=torch.float16
                     )
                 if self.scheduler:
-                    print(self.pipe.scheduler.config)
+                    # print(self.pipe.scheduler.config)
                     match self.scheduler:
                         case 'LCM':
                             self.pipe.scheduler = LCMScheduler.from_config(self.pipe.scheduler.config, use_karras_sigmas=True)
+                            self.pipe.load_lora_weights(LORA_LCM, weight_name='pytorch_lora_weights.safetensors', adapter_name="lora_lcm")
+                            self.pipe.set_adapters("lora_lcm", adapter_weights=0.8)
                         case 'DPM':
                             self.pipe.scheduler = DPMSolverMultistepScheduler.from_config(self.pipe.scheduler.config, solver_order=3, use_karras_sigmas=True)
                         case 'Euler':
-                            self.pipe.scheduler = EulerAncestralDiscreteScheduler.from_config(self.pipe.scheduler.config, use_karras_sigmas=True)
-                            self.pipe.load_lora_weights(LORA_LCM, adapter_name="lora_lcm")
-                            self.pipe.set_adapters("lora_lcm", adapter_weights=0.8)
+                            self.pipe.scheduler = EulerAncestralDiscreteScheduler.from_config(self.pipe.scheduler.config)
                     print(f'Scheduler {self.scheduler}: done')
                 else:
                     print('No scheduler')
@@ -76,8 +77,11 @@ class ModelLoader:
                 else:
                     print('No cuda')
                 if self.lora:
-                    self.pipe.load_lora_weights(self.lora, adapter_name="lora")
-                    self.pipe.set_adapters("lora", adapter_weights=0.8)
+                    for i, lora in enumerate(self.lora):
+                        print(f'{lora} loading...')
+                        self.pipe.load_lora_weights('local/loras', weight_name=lora, local_files_only=True, adapter_name=f"lora_{i}")
+                        self.pipe.set_adapters(f"lora_{i}", adapter_weights=0.8)
+                        print(f'Lora loaded: {lora}')
                     print('Lora done')
                 else:
                     print('No lora')

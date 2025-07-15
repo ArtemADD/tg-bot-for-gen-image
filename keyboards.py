@@ -1,4 +1,4 @@
-from config import LOADED_MODELS, SCHEDULERS
+from config import MODELS, SCHEDULERS, LORAS_COLUMNS, LORAS_ROWS
 from red import get_hsettings
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 
@@ -46,15 +46,16 @@ async def get_model_settings_menu(user_id):
             callback_data='seed')],
         [InlineKeyboardButton(text=f"🧩 CUDA: {'True' if settings['cuda'] else 'False'}", callback_data='cuda')],
         [InlineKeyboardButton(text=f"🎛️ Scheduler: {settings['scheduler']}", callback_data='scheduler')],
+        [InlineKeyboardButton(text="🖼️ Loras", callback_data='lora')],
         [InlineKeyboardButton(text="️⬅️ Назад", callback_data='back')]
     ]
     return InlineKeyboardMarkup(inline_keyboard=kb)
 
 
 async def get_model_menu(user_id):
-    model = dict(await get_hsettings(user_id))['model']
+    model = await get_hsettings(user_id, 'model')
     kb = [
-        [InlineKeyboardButton(text=model, callback_data=model)] for model in LOADED_MODELS.keys()
+        [InlineKeyboardButton(text=model, callback_data=model)] for model in MODELS.keys()
     ]
     kb.append([InlineKeyboardButton(text="️⬅️ Назад", callback_data='model_settings')])
     return InlineKeyboardMarkup(inline_keyboard=kb), model
@@ -67,3 +68,38 @@ async def get_scheduler_menu(user_id):
     ]
     kb.append([InlineKeyboardButton(text="️⬅️ Назад", callback_data='model_settings')])
     return InlineKeyboardMarkup(inline_keyboard=kb), scheduler
+
+
+async def get_lora_menu(user_id, loras):
+    print(loras)
+    current_page = await get_hsettings(user_id, 'page_loras')
+    length_loras = len(LORAS_COLUMNS)
+    pages = length_loras // LORAS_ROWS + 1
+    if current_page is not None:
+        loras_columns = LORAS_COLUMNS[LORAS_ROWS * (current_page - 1) : LORAS_ROWS * current_page] if LORAS_ROWS * current_page < length_loras else LORAS_COLUMNS[LORAS_ROWS * (current_page - 1) :]
+        # print(loras_columns, pages, current_page)
+    else:
+        loras_columns = LORAS_COLUMNS
+        # print(loras_columns)
+    kb = [
+        [
+            InlineKeyboardButton(text=f'✅ {row[0]}' if row[0] in loras else f'❎ {row[0]}', callback_data=row[0]),
+            InlineKeyboardButton(text=f'✅ {row[1]}' if row[1] in loras else f'❎ {row[1]}', callback_data=row[1])
+        ] for row in loras_columns[:-1]
+    ]
+    kb.append([
+        InlineKeyboardButton(text=f'✅ {loras_columns[-1][0]}' if loras_columns[-1][0] in loras else f'❎ {loras_columns[-1][0]}', callback_data=loras_columns[-1][0]),
+        InlineKeyboardButton(text=f'✅ {loras_columns[-1][1]}' if loras_columns[-1][1] in loras else f'❎ {loras_columns[-1][1]}', callback_data=loras_columns[-1][1])
+    ]) if len(loras_columns[-1]) == 2 else kb.append([
+        InlineKeyboardButton(text=f'✅ {loras_columns[-1][0]}' if loras_columns[-1][0] in loras else f'❎ {loras_columns[-1][0]}', callback_data=loras_columns[-1][0])
+    ])
+    if current_page is not None:
+        if current_page == 1:
+            kb.append([InlineKeyboardButton(text="️⬇️ Выйти", callback_data='model_settings'), InlineKeyboardButton(text="️➡️", callback_data='next_lora')])
+        elif current_page == pages:
+            kb.append([InlineKeyboardButton(text="️⬅️", callback_data='back_lora'), InlineKeyboardButton(text="️⬇️ Выйти", callback_data='model_settings')])
+        elif 1 < current_page < pages:
+            kb.append([InlineKeyboardButton(text="️⬅️", callback_data='back_lora'), InlineKeyboardButton(text="️⬇️", callback_data='model_settings'), InlineKeyboardButton(text="️➡️", callback_data='next_lora')])
+    else:
+        kb.append([InlineKeyboardButton(text="️⬇️ Выйти", callback_data='model_settings')])
+    return InlineKeyboardMarkup(inline_keyboard=kb)

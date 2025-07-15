@@ -8,9 +8,9 @@ from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import StatesGroup, State
 from aiogram.types import CallbackQuery, Message
 from db import init_db, save_setting, get_user_settings
-from config import BOT_TOKEN, BOT_ID, LOADED_MODELS, SCHEDULERS
-from red import update_hsettings, get_hsettings, chek_hsettings, add_hsettings
-from keyboards import get_base_settings_menu, get_model_settings_menu, get_model_menu, get_scheduler_menu
+from config import BOT_TOKEN, BOT_ID, MODELS, SCHEDULERS, LORAS, LORAS_COLUMNS, LORAS_ROWS
+from red import update_hsettings, get_hsettings, chek_hsettings, add_hsettings, add_once_hsettings, del_once_hsettings
+from keyboards import get_base_settings_menu, get_model_settings_menu, get_model_menu, get_scheduler_menu, get_lora_menu
 from handlers import dp
 # Включаем логирование, чтобы не пропустить важные сообщения
 logging.basicConfig(level=logging.INFO)
@@ -37,6 +37,20 @@ async def check_user(msg: Message) -> int:
     return user_id
 
 
+async def check_loras(user_id: int, loras: str) -> list[str] | str:
+    if ';' in loras:
+        loras = loras.split(';')
+        if not all(list(map(lambda x: x in LORAS.keys(), loras))):
+            loras = [lora for lora in loras if lora in LORAS.keys()]
+            await update_hsettings(user_id, 'loras', ';'.join(loras))
+            await save_setting(user_id, 'loras', ';'.join(loras))
+    elif loras != '' and loras not in LORAS.keys():
+        loras = ''
+        await update_hsettings(user_id, 'loras', '')
+        await save_setting(user_id, 'loras', '')
+    return loras
+
+
 # Handler на команду /start
 @dp.message(CommandStart())
 async def start(message: Message):
@@ -54,6 +68,7 @@ async def show_base_settings(msg: Message, s=False):
 @dp.callback_query(F.data == 'model_settings')
 async def model_settings(callback: CallbackQuery):
     await check_user(callback.message)
+    if await get_hsettings(callback.message.chat.id, 'page_loras') is not None: await del_once_hsettings(callback.message.chat.id, 'page_loras')
     await show_model_settings(callback.message)
 
 
@@ -74,7 +89,7 @@ async def show_model_menu(msg: Message):
     await msg.edit_text(f'🧠 Текущая модель: {model}', reply_markup=keyboard)
 
 
-@dp.callback_query(F.data.in_(LOADED_MODELS.keys()))
+@dp.callback_query(F.data.in_(MODELS.keys()))
 async def set_model(callback: CallbackQuery):
     await check_user(callback.message)
     await update_hsettings(callback.message.chat.id, 'model', callback.data)
@@ -97,10 +112,60 @@ async def set_scheduler(callback: CallbackQuery):
     await show_model_settings(callback.message)
 
 
+@dp.callback_query(F.data == 'lora')
+async def show_loras(callback: CallbackQuery):
+    await check_user(callback.message)
+    await show_loras_menu(callback.message)
+
+
+async def show_loras_menu(msg: Message):
+    loras = await check_loras(msg.chat.id, await get_hsettings(msg.chat.id,'loras'))
+    p = await get_hsettings(msg.chat.id, 'page_loras')
+    if len(LORAS_COLUMNS) > LORAS_ROWS and p is None:
+        await add_once_hsettings(msg.chat.id, 'page_loras', 1)
+        keyboard = await get_lora_menu(msg.chat.id, loras)
+    else:
+        keyboard = await get_lora_menu(msg.chat.id, loras)
+    await msg.edit_text('🖼️ Выбор lora:', reply_markup=keyboard)
+
+
+@dp.callback_query(F.data.in_(LORAS.keys()))
+async def set_loras(callback: CallbackQuery):
+    await check_user(callback.message)
+    loras = await get_hsettings(callback.message.chat.id, 'loras')
+    loras = loras.split(';') if ';' in loras else [] if loras == '' else [loras]
+    loras.remove(callback.data) if callback.data in loras else loras.append(callback.data)
+    loras = ';'.join(loras)
+    await update_hsettings(callback.message.chat.id, 'loras', loras)
+    await save_setting(callback.message.chat.id, 'loras', loras)
+    await show_loras_menu(callback.message)
+
+
+@dp.callback_query(F.data == 'back_lora')
+async def back_lora(callback: CallbackQuery):
+    await check_user(callback.message)
+    p = await get_hsettings(callback.message.chat.id, 'page_loras')
+    if p:
+        await update_hsettings(callback.message.chat.id, 'page_loras', p - 1)
+        await show_loras_menu(callback.message)
+    else:
+        await show_model_settings(callback.message)
+
+@dp.callback_query(F.data == 'next_lora')
+async def next_lora(callback: CallbackQuery):
+    await check_user(callback.message)
+    p = await get_hsettings(callback.message.chat.id, 'page_loras')
+    if p:
+        await update_hsettings(callback.message.chat.id, 'page_loras', p + 1)
+        await show_loras_menu(callback.message)
+    else:
+        await show_model_settings(callback.message)
+
+
 @dp.callback_query(F.data == 'cuda')
 async def set_cuda(callback: CallbackQuery):
     await check_user(callback.message)
-    cuda = dict(await get_hsettings(callback.message.chat.id))['cuda']
+    cuda = await get_hsettings(callback.message.chat.id, 'cuda')
     await update_hsettings(callback.message.chat.id, 'cuda', abs(cuda - 1))
     await save_setting(callback.message.chat.id, 'cuda', True if cuda == 1 else False)
     await show_model_settings(callback.message)
@@ -224,6 +289,8 @@ async def generate(callback: CallbackQuery):
     await check_user(callback.message)
     user_id = callback.from_user.id
     s = await get_hsettings(user_id)
+    s['loras'] = await check_loras(user_id, s['loras'])
+    # print(s['loras'])
     if s['prompt'] == '' or s['negative_prompt'] == '':
         await callback.message.edit_text('Введите промпт или негативный промпт')
         await asyncio.sleep(3)
@@ -246,9 +313,11 @@ async def generate(callback: CallbackQuery):
 
 def generate_image(settings, queue):
     try:
-        loader = LOADED_MODELS[settings['model']]
+        loader = MODELS[settings['model']].copy()
         if settings['scheduler'] != 'None': loader.set_scheduler(settings['scheduler'])
+        # print(settings['loras'])
         loader.set_cuda(settings['cuda'])
+        loader.set_lora([LORAS[lora] for lora in settings['loras']] if settings['loras'].__class__ == list else LORAS[settings['loras']])
         loader()
         # print(f'{settings}\n{loader}')
         n = settings['num_images'] if settings['seed'] == '' else 1
