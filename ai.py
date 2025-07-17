@@ -35,7 +35,7 @@ class ModelLoader:
         self.scheduler = scheduler
 
     def set_lora(self, lora: str | list | None):
-        self.lora = lora if lora.__class__ == list and lora != [] else [lora] if lora.__class__ == str and lora != '' else None
+        self.lora = lora if type(lora) == list and lora != [] else [lora] if type(lora) == str and lora != '' else None
 
     def set_cuda(self, cuda: bool):
         self.cuda = cuda
@@ -78,8 +78,8 @@ class ModelLoader:
                     print('No cuda')
                 if self.lora:
                     for i, lora in enumerate(self.lora):
-                        print(f'{lora} loading...')
-                        self.pipe.load_lora_weights('local/loras', weight_name=lora, local_files_only=True, adapter_name=f"lora_{i}")
+                        print(f'Lora {lora} loading...')
+                        self.pipe.load_lora_weights('local/loras', weight_name=lora if '/' not in lora else lora.split('/')[-1], local_files_only=True, adapter_name=f"lora_{i}")
                         self.pipe.set_adapters(f"lora_{i}", adapter_weights=0.8)
                         print(f'Lora loaded: {lora}')
                     print('Lora done')
